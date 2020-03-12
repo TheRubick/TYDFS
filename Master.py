@@ -23,6 +23,9 @@ lutLock = multiprocessing.Lock()
 #intialize the dkNUm with the number of data keepers
 dkNum = int(sys.argv[1])
 
+#intaite the port number of the first master process
+trackerPort = "6000"
+
 #for loop to intialize the data in the look up table
 for i in range(dkNum):
     dataLut['status'].append("alive")
@@ -33,13 +36,10 @@ for i in range(dkNum):
 
 def watchDogFunc(sharedLUT):
 
-    #defining the port of the pub sub connection
-    port = "6000"
-
     #intiating context
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
-    socket.bind("tcp://127.0.0.1:%s" % port)
+    socket.bind("tcp://127.0.0.1:%s" % trackerPort)
     socket.subscribe(topic="") # topic is empty string so the master accepts any string
 
     #intiate chance to live array to be used on making checks on the alive data keepers , maximum number of chance is 2
@@ -70,7 +70,7 @@ def watchDogFunc(sharedLUT):
 
         #recieve the num of the data keeper
         num = socket.recv_string()
-        tempdf[int(num)] = "alive"
+        tempdf['status'][int(num)] = "alive"
         #in case if the data keeper was dead then waked up again
         CTL[int(num)] = 0
         #add the num of this data keeper to the aliveSet
@@ -82,19 +82,21 @@ def watchDogFunc(sharedLUT):
         if(currentTime - startTime > 0.5):
             #intialize the notAlive set
             notAlive = dkSet.difference(aliveSet)
+            print(len(aliveSet))
             #loop on this set
             while(len(notAlive) != 0):
                 deadDk = notAlive.pop()
                 CTL[deadDk] = CTL[deadDk] + 1
                 #if the chance of the keeper = 2 means it didn't send to the master after 2 seconds , so it will be dead
                 if(CTL[deadDk] == 2): 
-                    tempdf[deadDk] = "dead"
+                    tempdf['status'][deadDk] = "dead"
 
             #make the flag of start period with true
             startPeriod = True
             #change the LUT shared between the processes
             lutLock.acquire()
             sharedLUT.df = tempdf
+            print(sharedLUT.df)
             lutLock.release()
 
             #reset the aliveSet
@@ -109,7 +111,17 @@ def watchDogFunc(sharedLUT):
             
             print("----------------------------------------------------------------")
             
-            
+def MasterTracker(portNum):
+    #configuring the context of the socket
+    context = zmq.Context()
+    socket = context.socket(zmq.REP)
+    socket.bind("tcp://127.0.0.1:%s" % str(portNum))
+    while True:
+        clientData = socket.recv_json()
+        print("tracker port # "+str(portNum)+" recieved from client # = "+str(clientData['id']))
+        #@TODO should be modified 
+        socket.send_string("recieved from you :D")
+        time.sleep(1)
     
 
 '''
@@ -119,9 +131,21 @@ in download phase , store the file name in lower case , use in operator to searc
 #make the lookUpTable data frame then assign it to the shared Memory "sharedLUT" 
 sharedLUT = multiprocessing.Manager().Namespace()
 sharedLUT.df = pd.DataFrame(dataLut)
+
+#@TODO remember to configure the number of the rest processes
+#intiate the rest of the processes
+masterProcesses = []
 #watch Dog process is used to keep tracking the alive messages from the data keepers
 watchDog = multiprocessing.Process(target=watchDogFunc,args=(sharedLUT,))
 
-watchDog.start()
+masterProcesses.append(watchDog)
 
-watchDog.join()
+masterProcesses[0].start()
+
+for i in range(2):
+    trackerPort = int(trackerPort) + 1
+    masterProcesses.append(multiprocessing.Process(target=MasterTracker,args=(trackerPort,)))
+    masterProcesses[i+1].start()
+
+for i in range(3):
+    masterProcesses[i].join()
