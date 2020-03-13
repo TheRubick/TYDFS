@@ -18,18 +18,21 @@ while True:
 		socket2 = context.socket(zmq.PAIR)
 		portForReplication = dic["port"]
 		nameOfFile = dic["nameOfFile"]
-		print (type(nameOfFile))
 		if dic["type"] == "src":
 			f = open(nameOfFile, "rb")
 			video=f.read()
 			dic2 = {"video":video}
 			socket2.bind("tcp://127.0.0.1:%s" % portForReplication)
+			print ('will send now')
 			socket2.send_pyobj(dic2)
+			print ('sent')
 			f.close()
 
 		elif dic["type"] == "dst":
 			socket.connect("tcp://127.0.0.1:%s" % portForReplication)
+			print ('will receve now')
 			dic2 = socket.recv_pyobj()
+			print ('receved')
 			video=dic2["video"]
 			f = open(nameOfFile, "ab")
 			f.write(video)
