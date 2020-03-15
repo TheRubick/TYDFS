@@ -33,18 +33,29 @@ def masterProcess(port,dataKeepersNum,sharedLUT):
             socket.send_pyobj(dataKeeperPort)
         if dic["requestType"]=="download":
             continue
+        
+
+
+def subNotifications(port,sharedLUT):
+    context = zmq.Context()
+    socket = context.socket(zmq.SUB)
+    socket.bind("tcp://127.0.0.1:%s" % port)
+    socket.subscribe(topic="") 
+    while True:
+        dic = socket.recv_pyobj()
         if dic["requestType"]=="notificationUpload":
-            done="done"
-            socket.send_pyobj(done)
-            #update look up table
-            df2 = pd.DataFrame({"status":"alive", 
-                                'dkID':[dic["dataKeeperport"]],
-                                'fileName':[dic["filename"]],
-                                'filePath':[dic["filepath"]],
-                                'userID':[str(dic["clientId"])]}) 
-            sharedLUT=sharedLUT.append(df2)
-            print(sharedLUT)
-            # send successful to the client
+                #update look up table
+                df2 = pd.DataFrame({"status":"alive", 
+                                    'dkID':[dic["dataKeeperport"]],
+                                    'fileName':[dic["filename"]],
+                                    'filePath':[dic["filepath"]],
+                                    'userID':[str(dic["clientId"])]}) 
+                sharedLUT=sharedLUT.append(df2)
+                print(sharedLUT)
+                # send successful to the client
+
+
+
 
 #////////////////////////////////////////////////////////////////////////////////////
 dataLut = {
@@ -75,5 +86,5 @@ sharedLUT = pd.DataFrame(dataLut)
 port =  sys.argv[1]
 masterProcess(port,2,sharedLUT)
 
-
+#subNotifications(port,sharedLUT)
 

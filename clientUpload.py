@@ -48,7 +48,7 @@ socket2 = context.socket(zmq.PAIR)
 socket2.connect(dataKeeperPort)
 socket2.send_pyobj(dic2)
 
-time.sleep(1)
+time.sleep(3)
 socket2.close()
 
 socket.send_pyobj(dic3)

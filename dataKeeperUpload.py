@@ -6,9 +6,10 @@ import time
 
 
 
-def dataKeeper(port):
+def dataKeeper(port,notificationPort):
     context = zmq.Context()
-    
+    socket2 = context.socket(zmq.PUB)
+    socket2.connect ("tcp://127.0.0.1:%s" % notificationPort)
 
     while True:
         socket = context.socket(zmq.PAIR)
@@ -24,21 +25,19 @@ def dataKeeper(port):
             f = open(filepath, "ab")
             f.write(video)
             f.close()
-            #notify masterrrrr
-            socket2 = context.socket(zmq.REQ)
-            socket2.connect ("tcp://127.0.0.1:%s" % dic["masterPort"])
+            #notify masterrrrr   
             dic["requestType"]="notificationUpload"
             dic["filepath"]=filepath
-            socket2.send_pyobj(dic)
-            done = socket2.recv_pyobj()
-            
-            print(done)
+            socket2.send_pyobj(dic) 
+         
         socket.close()
+        time.sleep(1) 
         print ("blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         
         
     
 port =  sys.argv[1]
-dataKeeper(port)
+port2 =  sys.argv[2]
+dataKeeper(port,port2)
     
     
