@@ -6,7 +6,7 @@ import random
 #intiate the client with specific id
 clientID = int(sys.argv[1])
 #assign the num of ports that the client would deal with "configurable"
-numMasterPorts = int(sys.argv[2]) - 1 # - 1 as we wouldn't include the watchDog process
+numMasterPorts = int(sys.argv[2])
 #file name
 fileName = str(sys.argv[3])
 #kind of operation download/upload i.e. 'd' would indicate download operation while 'u' would indicate upload operation
@@ -27,11 +27,10 @@ data = {
     'fileName' : fileName,
     'opType' : operationType
 }
+
 #sendin the request
-#@TODO try to make sure its is sent successfully from one real device to another
 socket.send_json(data)
 
-#@TODO should be modified
 #  Get the dkID which is the ip:port
 dkID = socket.recv_string()
 print("data keeper would be "+dkID)
