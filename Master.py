@@ -49,10 +49,11 @@ for i in range(dkNum):
     for j in range(dkProcessNum):
         processLut['dkNum'].append(i)
         processLut['status'].append("idle")
-        processLut['dkID'].append("tcp://127.0.0.1:"+str(6000+j+1))
+        #should be modified on configuration
+        processLut['dkID'].append("tcp://127.0.0.1:"+str(6020+j+i+1))
         processLut['userID'].append("--")
 
-def watchDogFunc(sharedLUT,sharedProcess,lutLock):
+def watchDogFunc(sharedLUT,lutLock):
 
     #intiating context
     context = zmq.Context()
@@ -128,51 +129,139 @@ def watchDogFunc(sharedLUT,sharedProcess,lutLock):
                 time.sleep(1-(endTime-startTime))
             
             print("----------------------------------------------------------------")
-            
+
+def getAvailablePortOfDataKeeperUpload(sharedLUT,sharedProcess,lutLock):
+    for dk in range(dkNum):
+        if(sharedLUT.df['status'][dk] == "alive"):
+            #sleep 2 seconds to make sure if it is still alive
+            time.sleep(2)
+            #check if the machine is still alive
+            if(sharedLUT.df['status'][dk] == "alive"):
+                #check on all the ports of the machine 
+                for port in range(dkProcessNum):
+                        #on finding the 1st idle port , assign it to the client
+                        if(sharedProcess.df['status'][port+dk] == "idle"):
+                            #first change it to busy port
+                            print(sharedProcess.df)
+                            tempdf = sharedProcess.df
+                            tempdf['status'][port+dk] = "busy"
+                            lutLock.acquire()
+                            sharedProcess.df = tempdf
+                            lutLock.release()
+                            print(sharedProcess.df)
+                            #then send this ip:port to the client and break
+                            return (sharedProcess.df['dkID'][port])
+
+
+def get_Dks_having_file_download(filename, sharedLUT,sharedProcess,lutLock):
+    dic=sharedLUT.to_dict()
+    dic2 = {}
+    dic3 = sharedProcess.to_dict()
+    for i in dic ["fileName"]:
+        if dic ["fileName"][i]== filename:
+            if dic ["status"][i] == "alive":
+                for j in range(dkNum*dkProcessNum):
+                    if(dic ["dkID"][i] == dic3["dkID"][j] and dic3["status"] == "idle"):
+                        lutLock.acquire()
+                        tempdf = sharedProcess.df
+                        tempdf["status"][j] = "busy"
+                        sharedProcess.df = tempdf
+                        lutLock.release()
+                        dic2[dic ["dkID"][i] ]= dic["filePath"][i]
+    return dic2
+
 def MasterTracker(portNum,sharedLUT,sharedProcess,lutLock):
     #configuring the context of the socket
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.bind("tcp://127.0.0.1:%s" % str(portNum))
-    #dummy
-    print(str(portNum)+"sdfsdfsdfsdf")
-    while True:
-        #recieving data from the client
-        clientData = socket.recv_json()
-        print("tracker port # "+str(portNum)+" recieved from client # = "+str(clientData['id']))
-        #@TODO should be modified
-        if(clientData['opType'] == "Upload"):
-            for dk in range(dkNum):
-                if(sharedLUT.df['status'][dk] == "alive"):
-                    #sleep 2 seconds to make sure if it is still alive
-                    time.sleep(2)
-                    #check if the machine is still alive
-                    if(sharedLUT.df['status'][dk] == "alive"):
-                        #check on all the ports of the machine 
-                        for port in range(dkProcessNum):
-                            #on finding the 1st idle port , assign it to the client
-                            if(sharedProcess.df['status'][port+dk] == "idle"):
-                                #first change it to busy port
-                                print(sharedProcess.df)
-                                tempdf = sharedProcess.df
-                                tempdf['status'][port+dk] = "busy"
-                                tempdf['userID'][port+dk] = clientData['id']
-                                lutLock.acquire()
-                                sharedProcess.df = tempdf
-                                lutLock.release()
-                                print(sharedProcess.df)
-                                #then send this ip:port to the client and break
-                                socket.send_string(sharedProcess.df['dkID'][port])
-                                break
 
+    while True: 
+        clientData = socket.recv_pyobj()
+        print(clientData["requestType"])
+        if clientData["requestType"]=="upload":
+            dataKeeperPort=getAvailablePortOfDataKeeperUpload(sharedLUT,sharedProcess,lutLock)
+            print(dataKeeperPort)
+            socket.send_pyobj(dataKeeperPort)
         #@TODO should be modified
-        elif(clientData['opType'] == "Download"):
-            #dummy dkID
-            socket.send_string("tcp://127.0.0.1:6000")
+        elif(clientData["requestType"] == "download"):
+            dks = get_Dks_having_file_download(clientData["arg"], sharedLUT,sharedProcess,lutLock)
+            socket.send_pyobj(dks)
+            print("master replied to client ")
         else:
             socket.send_string("bad request !! , please check the parameters u have entered")
         time.sleep(1)
+
+def update_available_table(ip, port, sharedLUT):
+    pass
+
+def subNotifications(sharedLUT,sharedProcess,lutLock):
     
+    context = zmq.Context()
+    socket = context.socket(zmq.SUB)
+    socket.bind("tcp://127.0.0.1:6100")
+    socket.subscribe(topic="") 
+    while True:
+        dic = socket.recv_pyobj()
+        if dic["requestType"]=="notificationUpload":
+                #update look up table
+                df2 = pd.DataFrame({"status":"alive", 
+                                    'dkID':[dic["dataKeeperport"]],
+                                    'fileName':[dic["filename"]],
+                                    'filePath':[dic["filepath"]],
+                                    'userID':[str(dic["clientId"])]}) 
+                print(sharedLUT)
+                #change the look up table
+                lutLock.acquire()
+                tempdf = sharedLUT.df
+                tempdf.append(df2)
+                sharedLUT.df=tempdf
+                lutLock.release()
+
+                print(sharedLUT)
+                
+                #change the process status from busy to idle
+                
+                tempdf = sharedProcess.df
+                for p in range(dkProcessNum):
+                    if(tempdf['dkID'][p] == df2['dkID'][p]):
+                        
+                        print("------------dobby dobby----------------------")
+                        print(tempdf['dkID'][p])
+                        print(tempdf['status'][p])
+                        print(sharedProcess.df)
+                        print("------------dobby dobby----------------------")
+                        tempdf['status'][p] = "idle"
+                        lutLock.acquire()        
+                        sharedProcess.df=tempdf
+                        lutLock.release()
+                        print("------------sobby sobby----------------------")
+                        print(sharedProcess.df)
+                        print("------------sobby sobby----------------------")
+                        #check in this break
+                        break
+
+        elif dic["requestType"]=="notificationDownload":
+            tempdf = sharedProcess.df
+            for p in range(dkProcessNum*dkNum):
+                if(tempdf['dkID'][p] == df2['dkID'][p]):            
+                    print("------------dobby dobby----------------------")
+                    print(tempdf['dkID'][p])
+                    print(tempdf['status'][p])
+                    print(sharedProcess.df)
+                    print("------------dobby dobby----------------------")
+                    tempdf['status'][p] = "idle"
+                    lutLock.acquire()        
+                    sharedProcess.df=tempdf
+                    lutLock.release()
+                    print("------------sobby sobby----------------------")
+                    print(sharedProcess.df)
+                    print("------------sobby sobby----------------------")
+                    #check in this break
+                    break
+
+
+
 
 '''
 @TODO
@@ -190,18 +279,26 @@ sharedProcess.df = pd.DataFrame(processLut)
 #intiate the rest of the processes
 masterProcesses = []
 #watch Dog process is used to keep tracking the alive messages from the data keepers
-watchDog = multiprocessing.Process(target=watchDogFunc,args=(sharedLUT,sharedProcess,lutLock,))
+watchDog = multiprocessing.Process(target=watchDogFunc,args=(sharedLUT,lutLock,))
 
 masterProcesses.append(watchDog)
 
 masterProcesses[0].start()
 
+#watch Dog process is used to keep tracking the alive messages from the data keepers
+subNotificationsProcess = multiprocessing.Process(target=subNotifications,args=(sharedLUT,sharedProcess,lutLock,))
+
+masterProcesses.append(subNotificationsProcess)
+
+masterProcesses[1].start()
+
+trackerPort = 6000
 
 #check if the number of the dk's processes is same as that of the master or not
-for i in range(2):
-    trackerPort = int(trackerPort) + 1
+for i in range(dkProcessNum):
+    trackerPort = trackerPort + 1
     masterProcesses.append(multiprocessing.Process(target=MasterTracker,args=(trackerPort,sharedLUT,sharedProcess,lutLock,)))
-    masterProcesses[i+1].start()
+    masterProcesses[i+2].start()
 
-for i in range(3):
+for i in range(dkProcessNum+2):
     masterProcesses[i].join()
