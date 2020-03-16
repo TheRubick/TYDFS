@@ -47,6 +47,20 @@ def dataKeeper(port):
             dic["requestType"]="notificationUpload"
             dic["filepath"]=filepath
             socket2.send_pyobj(dic) 
+            socketReplicateDK = zmq.Context().socket(zmq.PAIR)
+            socketReplicateDK.connect("tcp://127.0.0.1:"+str(6200+dkNum))
+            recvData = socketReplicateDK.recv_pyobj()
+            destData = {
+                "fileName" : recvData["fileName"],
+                "requestType" : "replicate",
+                "video" : dic["video"]
+            }
+            socket.connect(recvData["machineToCopy"])
+            socket.send_pyobj(destData)
+            #confirm to the Master that the file has been sent to the dest DK
+            dic["requestType"] = "notificationReplicaUpload"
+            socket2.send_pyobj(dic) 
+            socketReplicateDK.close()
 
         elif dic["requestType"]=="download":
             curFile = dic["filepath"]
@@ -64,6 +78,36 @@ def dataKeeper(port):
                     }
                 socket2.send_pyobj(dic)
 
+        elif dic["requestType"]=="replicate":
+            
+            nameOfFile = dic["nameOfFile"]
+            if dic["type"] == "src":
+                socket2 = context.socket(zmq.PUSH)
+                f = open(nameOfFile, "rb")
+                video=f.read()
+                dic2 = {
+                    "video" : video,
+                    "src" : dic["srcMachine"]
+                    }
+                socket2.bind(dic["machineToCopy"])
+                print ('will send now')
+                socket2.send_pyobj(dic2)
+                print ('sent')
+                #ass = fass
+                f.close()
+
+            elif dic["type"] == "dst":
+                socket2 = context.socket(zmq.PULL)
+                socket2.connect(dic["type"])
+                print ('will receve now')
+                dic2 = socket2.recv_pyobj()
+                print (dic2)
+                print ('receved')
+                video=dic2["video"]
+                f = open(nameOfFile, "ab")
+                f.write(video)
+                f.close()
+
         socket.close()
         time.sleep(1) 
         print ("blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")        
@@ -77,7 +121,7 @@ aliveProcess.start()
 dkProcesses = []
 dkProcesses.append(aliveProcess)
 
-port = 6020 + dkNum
+port = 6020 + dkNum*5
 for i in range(processNum):
     port = port + 1
     dkProcesses.append(multiprocessing.Process(target=dataKeeper,args=(str(port),)))

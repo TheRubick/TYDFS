@@ -35,6 +35,8 @@ dkNum = int(sys.argv[1])
 #intialize the number of processes for each data keeper
 dkProcessNum = int(sys.argv[2])
 
+numOfReplicates = int(sys.argv[3])
+
 #intaite the port number of the first master process
 trackerPort = "6000"
 
@@ -53,7 +55,7 @@ for i in range(dkNum):
         processLut['dkID'].append("tcp://127.0.0.1:"+str(6020+j+i+1))
         processLut['userID'].append("--")
 
-def watchDogFunc(sharedLUT,lutLock):
+def watchDogFunc(sharedLUT,sharedProcess,lutLock):
 
     #intiating context
     context = zmq.Context()
@@ -109,6 +111,19 @@ def watchDogFunc(sharedLUT,lutLock):
                 #if the chance of the keeper = 2 means it didn't send to the master after 2 seconds , so it will be dead
                 if(CTL[deadDk] == 2): 
                     tempdf['status'][deadDk] = "dead"
+                    #replicate the files that are in the dead machine
+                    processOfDeadDk = sharedProcess.df[sharedProcess.df['dkNum'] == deadDk]
+                    print(sharedProcess.df)
+                    print(processOfDeadDk)
+                    #for each one of those processes , if it stores a file ? then replicate it
+                    fileToReplicate = []
+                    for deadProcess in processOfDeadDk['dkID']:
+                        for dks in range(sharedLUT.df.shape[0]):    
+                            if(deadProcess == sharedLUT.df['dkID'][dks]):
+                                fileToReplicate.append(sharedLUT.df['fileName'][dks])
+                    print(fileToReplicate)
+                    for fileTR in fileToReplicate:
+                        Replicates("replicateDead",fileTR,sharedLUT,sharedProcess,"")
 
             #make the flag of start period with true
             startPeriod = True
@@ -218,8 +233,83 @@ def MasterTracker(portNum,sharedLUT,sharedProcess,lutLock):
             socket.send_string("bad request !! , please check the parameters u have entered")
         time.sleep(1)
 
-def update_available_table(ip, port, sharedLUT):
-    pass
+'''
+Replicas Phase
+'''
+
+def NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, nameOfFile, replicateSocket):#fffhfghfhgffhgfhg
+
+    #in case of uploading file
+    if(opType == "upload"):
+        data = {
+            "fileName" : nameOfFile,
+            "machineToCopy" : machineToCopy
+        }
+        replicateSocket.send_pyobj()
+    #if some one is dead and we want to replicate its' files
+    else:
+        data = {
+            "requestType" : "replicate",
+            "fileName" : nameOfFile,
+            "machineToCopy" : machineToCopy,
+            "type" : "src",
+            "srcMachine" : sourceMachine
+        }
+        #intialize a socket
+        socket = zmq.Context().socket(zmq.PAIR)
+        socket.connect(sourceMachine)
+        socket.close()
+
+
+def getInstanceCount(nameOfFile,sharedLUT):
+    count = 0
+    for i in range(sharedLUT.df.shape[0]):
+        if(sharedLUT.df['fileName'] == nameOfFile):
+            count = count + 1
+    return count
+
+def getSourceMachine(nameOfFile,sharedProcess,sharedLUT):
+    
+    #loop on all the shared process table
+    for i in range(sharedProcess.df.shape[0]):
+        #if this process of dk doesnot contain the file
+        if(sharedProcess.df['fileName'][i] == nameOfFile and sharedProcess.df['status'][i] == "idle"):
+            #if the machine is still alive
+            indexDK = sharedProcess.df['dkNum'][i]
+            if(sharedLUT.df["status"][indexDK] == "alive"):
+                return sharedProcess.df['dkID'][i]
+
+    return 0 # the non-existance of the files in all the dks
+
+
+
+def selectMachineToCopyTo(nameOfFile,sharedProcess,sharedLUT):
+    
+    #loop on all the shared process table
+    for i in range(sharedProcess.df.shape[0]):
+        #if this process of dk doesnot contain the file
+        if(sharedProcess.df['fileName'][i] != nameOfFile and sharedProcess.df['status'][i] == "idle"):
+            #if the machine is still alive
+            indexDK = sharedProcess.df['dkNum'][i]
+            if(sharedLUT.df["status"][indexDK] == "alive"):
+                return sharedProcess.df['dkID'][i]
+
+    return 0 # the existance of the files in all the dks
+
+def Replicates(opType,fileName,sharedLUT,sharedProcess,replicateSocket):      
+	
+	#while True:             # iguess this will not loop forever here and we will but it outside the function
+		#time.sleep(5) 
+		#for k in range(len(fileName)):
+	instanceCount = getInstanceCount(fileName[k])         # how many the file exsist in alive machines
+	numOfReplicatesNeeded = numOfReplicates - instanceCount       # how many copies needed
+	#print ("nim ....................." + numOfReplicatesNeeded)
+	if(numOfReplicatesNeeded > 0) and (instanceCount != 0):
+		sourceMachine = getSourceMachine(fileName,sharedProcess,sharedLUT)  # for now it is the num of the macine only
+		for x in range(0,numOfReplicatesNeeded):
+            machineToCopy = selectMachineToCopyTo(fileName,sharedProcess,sharedLUT)        #select machine depending on alive and not containing this file already
+			NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, fileName,replicateSocket)      # send to the two machines to transfare the file
+
 
 def subNotifications(sharedLUT,sharedProcess,lutLock):
     
@@ -231,7 +321,7 @@ def subNotifications(sharedLUT,sharedProcess,lutLock):
         dic = socket.recv_pyobj()
         if dic["requestType"]=="notificationUpload":
                 #update look up table
-                df2 = pd.DataFrame({"status":"alive", 
+                df2 = pd.DataFrame({"status":"--", 
                                     'dkID':[dic["dataKeeperport"]],
                                     'fileName':[dic["filename"]],
                                     'filePath':[dic["filepath"]],
@@ -268,10 +358,18 @@ def subNotifications(sharedLUT,sharedProcess,lutLock):
                         print("------------sobby sobby----------------------")
                         print(sharedProcess.df)
                         print("------------sobby sobby----------------------")
+                        #replicate this file , first make another socket to connect to the datakeeper port
+                        replicateSocket = zmq.Context().socket(zmq.PAIR)
+                        #modify this case
+                        replicateSocket.bind("tcp://127.0.0.1:"str(6200+tempdf['dkNum'][p]))
+                        Replicates("upload",dic["filename"],sharedLUT,sharedProcess,replicateSocket)
+                        replicateSocket.close()
                         #check in this break
                         break
+                        
+                    
 
-        elif dic["requestType"]=="notificationDownload":
+        elif dic["requestType"]=="notificationDownload" or dic["requestType"]=="notificationReplicaUpload":
             tempdf = sharedProcess.df
             for p in range(dkProcessNum*dkNum):
                 if(tempdf['dkID'][p] == df2['dkID'][p]):  
@@ -309,7 +407,7 @@ sharedProcess.df = pd.DataFrame(processLut)
 #intiate the rest of the processes
 masterProcesses = []
 #watch Dog process is used to keep tracking the alive messages from the data keepers
-watchDog = multiprocessing.Process(target=watchDogFunc,args=(sharedLUT,lutLock,))
+watchDog = multiprocessing.Process(target=watchDogFunc,args=(sharedLUT,sharedProcess,lutLock,))
 
 masterProcesses.append(watchDog)
 

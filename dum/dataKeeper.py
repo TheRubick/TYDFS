@@ -3,7 +3,7 @@ import sys
 import time
 
 
-port =  sys.argv[1]
+port =  sys.argv[1] #idle port
 
 context = zmq.Context()
 socket = context.socket(zmq.PAIR)
@@ -15,7 +15,7 @@ while True:
 	dic = socket.recv_pyobj()
 	if dic["requestType"]=="replicate":
 		
-		portForReplication = dic["port"]
+		
 		nameOfFile = dic["nameOfFile"]
 		if dic["type"] == "src":
 			socket2 = context.socket(zmq.PUSH)

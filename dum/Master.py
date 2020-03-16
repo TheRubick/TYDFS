@@ -32,14 +32,14 @@ df = pd.DataFrame(lookUpTable)          # convert look up table to dataframe
 
 
 def getInstanceCount(nameOfFile):     # return how many copies of the file in the look up table
-	alive = df[df.status == 'yes']    # new data frame of alive only
+	alive = df[df.status == 'alive']    # new data frame of alive only
 	cont = alive[alive.fileName == nameOfFile].fileName.count()   # get the count
 	print ("count is : " + str(cont))
 	return cont
 
-def getSourceMachine(nameOfFile):
-	alive = df[df.status == 'yes']
-	sub_df = alive[alive.fileName == nameOfFile]  # sub dataframe that contains only rows for that file
+def getSourceMachine(nameOfFile,sharedLUT):#dgfhgfhhgfh
+	alive = sharedLUT.df[sharedLUT.df['status'] == 'alive']
+	sub_df = alive[alive['fileName'] == nameOfFile]  # sub dataframe that contains only rows for that file
 	data_list = sub_df.values.tolist()  # convert the dataframe to list
 	print (data_list)
 	srcMachine = data_list[0][0]    #get the first machine
@@ -47,11 +47,12 @@ def getSourceMachine(nameOfFile):
 	#srcList = [srcMachine, path]     #store them in list and return it
 	#return srcList
 	print ("source machine is : " + str(srcMachine))
-	return srcMachine           # for now returns only the num of the machine
+	return srcMachine           # for now returns only the num of the machine;';';';'
+	#return the port function with it
 
-def selectMachineToCopyTo(nameOfFile):
-	alive = df[df.status == 'yes']
-	sub_df = alive[alive.fileName == nameOfFile]         #get the dataframe where the file in
+def selectMachineToCopyTo(nameOfFile):#dgdgddgfgdf
+	alive = df[df.status == 'alive']
+	sub_df = alive[alive.fileName == nameOfFile]         #get the dataframe where the file in;';'';';;';';'
 	dk_list = alive.dkID.values.tolist()          # will change to look at the first rows only  # convert to list
 	#search for the machines where the file is not in
 	machineNodes = sub_df.dkID.tolist()
@@ -65,12 +66,13 @@ def selectMachineToCopyTo(nameOfFile):
 		selectedMacine = z.pop()
 		print ("dst macine is : " + str(selectedMacine))
 		return selectedMacine    #for now it returns the machine num only
+	#return the port function with it
 
 
-def NotifyMachineDataTransfer(sourceMachine, machineToCopy, nameOfFile):
+def NotifyMachineDataTransfer(sourceMachine, machineToCopy, nameOfFile):#fffhfghfhgffhgfhg
 	port = 5556         # selecting port for the two machines to contact with  # will change to see which is available
 	srcPort = 6002          # port to send to the src the req type  # will change to see which is available
-	dstPort = 6001          # port to send to the dst the req type  # will change to see which is available
+	dstPort = 6001          # port to send to the dst the req type  # will change to see which is availablel';ll;l;l;ll;l;l;
 	dic={"requestType":"replicate", "type":'src', "nameOfFile":nameOfFile, "port":port}
 	dic2={"requestType":"replicate", "type":'dst', "nameOfFile":nameOfFile, "port":port}
 	dk = 'dataKeeper'
