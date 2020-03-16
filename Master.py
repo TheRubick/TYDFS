@@ -113,8 +113,26 @@ def watchDogFunc(sharedLUT,lutLock):
             #make the flag of start period with true
             startPeriod = True
             #change the LUT shared between the processes
+            #print("-------sharedLUT before modify")
+            #print(sharedLUT.df)
+            #print("tempdf")
+            #print(tempdf)
             lutLock.acquire()
-            sharedLUT.df = tempdf
+            tempdf2 = sharedLUT.df
+            #print("-------tempdf2----------")
+            #print(tempdf2)
+            for i in range(dkNum):
+                #print(tempdf2['status'][i]+" "+tempdf2['dkID'][i]+" "+tempdf2['fileName'][i]+" "+tempdf2['filePath'][i]+" "+tempdf2['userID'][i])
+                tempdf2['status'][i] = tempdf['status'][i]
+                tempdf2['dkID'][i] = tempdf['dkID'][i]
+                tempdf2['fileName'][i] = tempdf['fileName'][i]
+                tempdf2['filePath'][i] = tempdf['filePath'][i]
+                tempdf2['userID'][i] = tempdf['userID'][i]
+                #print(tempdf2['status'][i]+" "+tempdf2['dkID'][i]+" "+tempdf2['fileName'][i]+" "+tempdf2['filePath'][i]+" "+tempdf2['userID'][i])
+
+            #print("tempdf2 after modify")
+            #print(tempdf2)
+            sharedLUT.df = tempdf2
             print(sharedLUT.df)
             lutLock.release()
 
@@ -154,14 +172,19 @@ def getAvailablePortOfDataKeeperUpload(sharedLUT,sharedProcess,lutLock):
 
 
 def get_Dks_having_file_download(filename, sharedLUT,sharedProcess,lutLock):
-    dic=sharedLUT.to_dict()
+    dic = sharedLUT.df
     dic2 = {}
-    dic3 = sharedProcess.to_dict()
+    dic3 = sharedProcess.df
+    print(dic)
+    print("-------jjjjj-----------------")
     for i in dic ["fileName"]:
-        if dic ["fileName"][i]== filename:
+        print(i)
+    print("------------------------------------------------")
+    for i in range(sharedLUT.df.shape[0]):
+        if dic ["fileName"][i] == filename and dic["fileName"][i] != "--":
             if dic ["status"][i] == "alive":
-                for j in range(dkNum*dkProcessNum):
-                    if(dic ["dkID"][i] == dic3["dkID"][j] and dic3["status"] == "idle"):
+                for j in range(sharedProcess.df.shape[0]):
+                    if(dic ["dkID"][i] == dic3["dkID"][j] and dic3["status"][j] == "idle"):
                         lutLock.acquire()
                         tempdf = sharedProcess.df
                         tempdf["status"][j] = "busy"
@@ -186,6 +209,9 @@ def MasterTracker(portNum,sharedLUT,sharedProcess,lutLock):
         #@TODO should be modified
         elif(clientData["requestType"] == "download"):
             dks = get_Dks_having_file_download(clientData["arg"], sharedLUT,sharedProcess,lutLock)
+            #print(dks)
+            #dks['requestType'] = "download"
+            #print(dks)
             socket.send_pyobj(dks)
             print("master replied to client ")
         else:
@@ -214,7 +240,11 @@ def subNotifications(sharedLUT,sharedProcess,lutLock):
                 #change the look up table
                 lutLock.acquire()
                 tempdf = sharedLUT.df
-                tempdf.append(df2)
+                print("--------sfdsdfsfsdfdsfsdfds----------------")
+                print(tempdf)
+                tempdf = tempdf.append(df2,ignore_index=True)
+                print(tempdf)
+                print("--------sfdsdfsfsdfdsfsdfds99999999999999999999999----------------")
                 sharedLUT.df=tempdf
                 lutLock.release()
 
@@ -244,14 +274,14 @@ def subNotifications(sharedLUT,sharedProcess,lutLock):
         elif dic["requestType"]=="notificationDownload":
             tempdf = sharedProcess.df
             for p in range(dkProcessNum*dkNum):
-                if(tempdf['dkID'][p] == df2['dkID'][p]):            
+                if(tempdf['dkID'][p] == df2['dkID'][p]):  
                     print("------------dobby dobby----------------------")
                     print(tempdf['dkID'][p])
                     print(tempdf['status'][p])
                     print(sharedProcess.df)
                     print("------------dobby dobby----------------------")
                     tempdf['status'][p] = "idle"
-                    lutLock.acquire()        
+                    lutLock.acquire()
                     sharedProcess.df=tempdf
                     lutLock.release()
                     print("------------sobby sobby----------------------")
