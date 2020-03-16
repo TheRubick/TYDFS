@@ -24,7 +24,7 @@ print("Sending request ")
 
 if(operationType == "upload"):
 
-    f = open("videotest.mp4", "rb")
+    f = open(fileName, "rb")
     video=f.read()
     #intialize data dictionary which have the file name and the operation type
     dic={"requestType":"upload" }
@@ -45,8 +45,8 @@ if(operationType == "upload"):
 
 
 elif(operationType == "download"):
-    path_to_download_to = "tempFolder"
-    request = {"requestType":"download", "arg" : "newtest1.mp4"} # send the master the type of service i need plus the file i need to download in case of download
+    path_to_download_to = "tempFolder/"
+    request = {"requestType":"download", "arg" : fileName} # send the master the type of service i need plus the file i need to download in case of download
     socket.send_pyobj(request) #send my request to the master, dic of {"req type":"---", "file_name":"---"}
     reply = socket.recv_pyobj() # get my response from the master, dic of  ips having my file and the corresponding port of each ip puls the path where the file is stored at this ip, i.e {"ip :[port, map], ---}
     #ip-port = ''
@@ -64,7 +64,7 @@ elif(operationType == "download"):
             socket.close()
             socket = context.socket(zmq.PAIR)
             socket.connect(i)
-            request = {"type":"download", "path" : path}
+            request = {"requestType":"download", "filepath" : path}
             socket.send_pyobj(request) # request for the file is sent
             start = time.time()
             if time.time() - start == 3:
@@ -72,7 +72,7 @@ elif(operationType == "download"):
             print('Req to dk: %s is sent '%(i))
             msgg = socket.recv_pyobj() # file is recieved and to be saved
             print('Rep is recieved from dk : %s '%(i))
-            destfile = path_to_download_to
+            destfile = path_to_download_to+str("ssfds.mp4")
             f = open(destfile, 'wb')
             f.write(msgg[0])
             rec_size = msgg[1]

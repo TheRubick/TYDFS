@@ -34,6 +34,7 @@ def dataKeeper(port):
         print("before recieve")
         dic = socket.recv_pyobj()
         print("after recieve .........")
+        print(dic)
         print(dic["requestType"])
         if dic["requestType"]=="upload":
             video=dic["video"]
