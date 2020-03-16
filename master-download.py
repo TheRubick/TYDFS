@@ -13,8 +13,8 @@ def update_available_alive(ip, port, sharedLUT):
     socket.connect("tcp://%s:%s"%(ip,port))
     socket.setsockopt(zmq.SUBSCRIBE, b'availability')
     while True:
-        topic = socket1.recv_string()
-        msg = socket1.recv_string()
+        topic = socket.recv_string()
+        msg = socket.recv_string()
         update_available_table(ip, port, sharedLUT)
         print("avialbale updated in master")
 
@@ -81,6 +81,3 @@ ip2 = sys.argv[3]
 port2 = sys.argv[4]
 #update_available_alive(ip2,port2,sharedLUT)
 main_master(ip, port, sharedLUT)
-
-
-

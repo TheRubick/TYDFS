@@ -23,7 +23,7 @@ def client_download_main(master_ip, master_port, path_to_download_to):
             path = reply[i]
             if rec_size == new_size:
                 check = False
-                break;
+                break
             socket.close()
             socket = context.socket(zmq.PAIR)
             socket.connect(i)
@@ -49,4 +49,3 @@ ip =  sys.argv[1]
 port = sys.argv[2]
 path = sys.argv[3]
 client_download_main(ip, port, path)
-
