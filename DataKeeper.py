@@ -53,9 +53,10 @@ def dataKeeper(port):
             destData = {
                 "fileName" : recvData["fileName"],
                 "requestType" : "replicate",
-                "video" : dic["video"]
+                "video" : dic["video"],
+                "type" : "dst"
             }
-            socket.connect(recvData["machineToCopy"])
+            socket.bind(recvData["machineToCopy"])
             socket.send_pyobj(destData)
             #confirm to the Master that the file has been sent to the dest DK
             dic["requestType"] = "notificationReplicaUpload"
@@ -82,7 +83,7 @@ def dataKeeper(port):
             
             nameOfFile = dic["nameOfFile"]
             if dic["type"] == "src":
-                socket2 = context.socket(zmq.PUSH)
+                socket2 = context.socket(zmq.PAIR)
                 f = open(nameOfFile, "rb")
                 video=f.read()
                 dic2 = {
@@ -97,7 +98,7 @@ def dataKeeper(port):
                 f.close()
 
             elif dic["type"] == "dst":
-                socket2 = context.socket(zmq.PULL)
+                socket2 = context.socket(zmq.PAIR)
                 socket2.connect(dic["type"])
                 print ('will receve now')
                 dic2 = socket2.recv_pyobj()
@@ -121,7 +122,7 @@ aliveProcess.start()
 dkProcesses = []
 dkProcesses.append(aliveProcess)
 
-port = 6020 + dkNum*5
+port = 6020
 for i in range(processNum):
     port = port + 1
     dkProcesses.append(multiprocessing.Process(target=dataKeeper,args=(str(port),)))

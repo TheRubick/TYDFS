@@ -119,7 +119,7 @@ def watchDogFunc(sharedLUT,sharedProcess,lutLock):
                     fileToReplicate = []
                     for deadProcess in processOfDeadDk['dkID']:
                         for dks in range(sharedLUT.df.shape[0]):    
-                            if(deadProcess == sharedLUT.df['dkID'][dks]):
+                            if(deadProcess == sharedLUT.df['dkID'][dks] and sharedLUT.df['fileName'][dks] != '--'):
                                 fileToReplicate.append(sharedLUT.df['fileName'][dks])
                     print(fileToReplicate)
                     for fileTR in fileToReplicate:
@@ -262,53 +262,40 @@ def NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, nameOfFile, r
 
 
 def getInstanceCount(nameOfFile,sharedLUT):
-    count = 0
-    for i in range(sharedLUT.df.shape[0]):
-        if(sharedLUT.df['fileName'] == nameOfFile):
-            count = count + 1
+    
+    alive = sharedLUT.df[sharedLUT.df.status == "alive"]
+    alive = alive[alive.fileName == "nameOfFile"]
+    count = alive.fileName.count()
     return count
 
 def getSourceMachine(nameOfFile,sharedProcess,sharedLUT):
-    
-    #loop on all the shared process table
-    for i in range(sharedProcess.df.shape[0]):
-        #if this process of dk doesnot contain the file
-        if(sharedProcess.df['fileName'][i] == nameOfFile and sharedProcess.df['status'][i] == "idle"):
-            #if the machine is still alive
-            indexDK = sharedProcess.df['dkNum'][i]
-            if(sharedLUT.df["status"][indexDK] == "alive"):
-                return sharedProcess.df['dkID'][i]
-
-    return 0 # the non-existance of the files in all the dks
-
+    alive = sharedLUT.df[sharedLUT.df.status == 'alive']
+    sub_df = alive[alive.fileName == nameOfFile]  # sub dataframe that contains only rows for that file
+    idleProcesses = sharedProcess.df[sharedProcess.df.status == "idle"]
+    x = set(sub_df.dkID)
+    y = set(idleProcesses.dkID)
+    z = x and y
+    return z.pop()
 
 
 def selectMachineToCopyTo(nameOfFile,sharedProcess,sharedLUT):
     
-    #loop on all the shared process table
-    for i in range(sharedProcess.df.shape[0]):
-        #if this process of dk doesnot contain the file
-        if(sharedProcess.df['fileName'][i] != nameOfFile and sharedProcess.df['status'][i] == "idle"):
-            #if the machine is still alive
-            indexDK = sharedProcess.df['dkNum'][i]
-            if(sharedLUT.df["status"][indexDK] == "alive"):
-                return sharedProcess.df['dkID'][i]
+    alive = sharedLUT.df[sharedLUT.df.status == 'alive']
+    sub_df = alive[alive.fileName != nameOfFile]  # sub dataframe that contains only rows for that file
+    idleProcesses = sharedProcess.df[sharedProcess.df.status == "idle"]
+    x = set(sub_df.dkID)
+    y = set(idleProcesses.dkID)
+    z = x and y
+    return z.pop()
 
-    return 0 # the existance of the files in all the dks
-
-def Replicates(opType,fileName,sharedLUT,sharedProcess,replicateSocket):      
-	
-	#while True:             # iguess this will not loop forever here and we will but it outside the function
-		#time.sleep(5) 
-		#for k in range(len(fileName)):
-	instanceCount = getInstanceCount(fileName[k])         # how many the file exsist in alive machines
-	numOfReplicatesNeeded = numOfReplicates - instanceCount       # how many copies needed
-	#print ("nim ....................." + numOfReplicatesNeeded)
-	if(numOfReplicatesNeeded > 0) and (instanceCount != 0):
-		sourceMachine = getSourceMachine(fileName,sharedProcess,sharedLUT)  # for now it is the num of the macine only
-		for x in range(0,numOfReplicatesNeeded):
-            machineToCopy = selectMachineToCopyTo(fileName,sharedProcess,sharedLUT)        #select machine depending on alive and not containing this file already
-			NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, fileName,replicateSocket)      # send to the two machines to transfare the file
+def Replicates(opType,fileName,sharedLUT,sharedProcess,replicateSocket):
+    instanceCount = getInstanceCount(fileName,sharedLUT)         # how many the file exsist in alive 
+    machinesnumOfReplicatesNeeded = numOfReplicates - instanceCount       # how many copies needed
+    if(numOfReplicatesNeeded > 0) and (instanceCount != 0):
+        sourceMachine = getSourceMachine(fileName,sharedProcess,sharedLUT)  # for now it is the num of the macine only
+        for x in range(0,numOfReplicatesNeeded):
+            machineToCopy = selectMachineToCopyTo(fileName,sharedProcess.sharedLUT)
+            NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, fileName,replicateSocket)      # send to the two machines to transfare the file
 
 
 def subNotifications(sharedLUT,sharedProcess,lutLock):
@@ -361,7 +348,7 @@ def subNotifications(sharedLUT,sharedProcess,lutLock):
                         #replicate this file , first make another socket to connect to the datakeeper port
                         replicateSocket = zmq.Context().socket(zmq.PAIR)
                         #modify this case
-                        replicateSocket.bind("tcp://127.0.0.1:"str(6200+tempdf['dkNum'][p]))
+                        replicateSocket.bind("tcp://127.0.0.1:"+str(6200+tempdf['dkNum'][p]))
                         Replicates("upload",dic["filename"],sharedLUT,sharedProcess,replicateSocket)
                         replicateSocket.close()
                         #check in this break
