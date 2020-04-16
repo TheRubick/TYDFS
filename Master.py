@@ -49,7 +49,8 @@ for i in range(dkNum):
     dataLut['status'].append("alive")
     #@TODO should be configured from conf.sh
     
-    dataLut['dkID'].append("tcp://127.0.0.1:6000")
+    dkAddress = "tcp://127.0.0."+str(i+1)+":6000"
+    dataLut['dkID'].append(dkAddress)
     dataLut['fileName'].append("--")
     dataLut['filePath'].append("--")
     dataLut['userID'].append("--")
@@ -57,7 +58,8 @@ for i in range(dkNum):
         processLut['dkNum'].append(i)
         processLut['status'].append("idle")
         #should be modified on configuration
-        processLut['dkID'].append("tcp://127.0.0.1:"+str(6020+j+i+1))
+        dkProcessIP = "tcp://127.0.0."+str(i+1)+":"+str(6020+j)
+        processLut['dkID'].append(dkProcessIP)
         processLut['userID'].append("--")
 
 def watchDogFunc(sharedLUT,sharedProcess,lutLock):

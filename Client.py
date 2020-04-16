@@ -19,7 +19,7 @@ socket = context.socket(zmq.REQ)
 
 #intialize the port number of the Master to be connected to
 portNum = random.randint(6001,6000+numMasterPorts)
-socket.connect("tcp://127.0.0.1:%s" % str(portNum))
+socket.connect("tcp://127.0.0.244:%s" % str(portNum))
 print("Sending request ")
 
 if(operationType == "upload"):

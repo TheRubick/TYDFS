@@ -30,7 +30,7 @@ def dataKeeper(port):
 
     while True:
         socket = context.socket(zmq.PAIR)
-        socket.bind("tcp://127.0.0."+(dkNum+1)+":%s" % port)
+        socket.bind("tcp://127.0.0."+str(dkNum+1)+":%s" % port)
         print("before recieve")
         dic = socket.recv_pyobj()
         print("after recieve .........")
@@ -123,9 +123,9 @@ dkProcesses.append(aliveProcess)
 
 port = 6020
 for i in range(processNum):
-    port = port + 1
     dkProcesses.append(multiprocessing.Process(target=dataKeeper,args=(str(port),)))
     dkProcesses[i+1].start()
+    port = port + 1
 
 
 aliveProcess.join()
