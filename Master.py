@@ -248,6 +248,7 @@ def NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, nameOfFile, r
 
     #in case of uploading file
     if(opType == "upload"):
+        print("source machine ")
         data = {
             "nameOfFile" : nameOfFile,
             "machineToCopy" : machineToCopy
@@ -270,18 +271,36 @@ def NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, nameOfFile, r
 
 def getInstanceCount(nameOfFile,sharedLUT):
     
-    alive = sharedLUT.df[sharedLUT.df.status == "alive"]
-    alive = alive[alive.fileName == "nameOfFile"]
+    alive = sharedLUT.df[sharedLUT.df.status == "--"]
+    alive = alive[alive.fileName == nameOfFile]
     count = alive.fileName.count()
     return count
 
 def getSourceMachine(nameOfFile,sharedProcess,sharedLUT):
+    #handle case no source machine
     alive = sharedLUT.df[sharedLUT.df.status == 'alive']
-    sub_df = alive[alive.fileName == nameOfFile]  # sub dataframe that contains only rows for that file
-    idleProcesses = sharedProcess.df[sharedProcess.df.status == "idle"]
-    x = set(sub_df.dkID)
-    y = set(idleProcesses.dkID)
-    z = x and y
+
+    sub_df = sharedLUT.df[sharedLUT.df.fileName == nameOfFile]  # sub dataframe that contains only rows for that file
+    print("print sub_df")
+    print(sub_df)
+    #get idle and alive processes
+    idleProcesses = sharedProcess.df[sharedProcess.df.status == "idle" and sharedProcess.df.dkNum == alive.dkNum]
+    
+    print("print idle processes")
+    print(idleProcesses)
+    
+    
+    x = set(sub_df.dkID.to_list())
+    y = set(idleProcesses.dkID.to_list())
+    t = y.difference(x)
+    print("x set")
+    print(x)
+    print("y set")
+    print(y)
+    print("t set")
+    print(t)
+    z = y.difference(t)
+    print(z)
     return z.pop()
 
 
@@ -293,16 +312,23 @@ def selectMachineToCopyTo(nameOfFile,sharedProcess,sharedLUT):
     x = set(sub_df.dkID)
     y = set(idleProcesses.dkID)
     z = x and y
+    print(z)
     return z.pop()
 
 def Replicates(opType,fileName,sharedLUT,sharedProcess,replicateSocket):
+    #print("inside replicate function")
     instanceCount = getInstanceCount(fileName,sharedLUT)         # how many the file exsist in alive 
     machinesnumOfReplicatesNeeded = numOfReplicates - instanceCount       # how many copies needed
-    if(numOfReplicatesNeeded > 0) and (instanceCount != 0):
+    if(machinesnumOfReplicatesNeeded > 0) and (instanceCount != 0):
         sourceMachine = getSourceMachine(fileName,sharedProcess,sharedLUT)  # for now it is the num of the macine only
-        for x in range(0,numOfReplicatesNeeded):
-            machineToCopy = selectMachineToCopyTo(fileName,sharedProcess.sharedLUT)
+        print("src machine is "+sourceMachine)
+        for _ in range(0,machinesnumOfReplicatesNeeded):
+            machineToCopy = selectMachineToCopyTo(fileName,sharedProcess,sharedLUT)
+            print("src machine is "+machineToCopy)    
             NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, fileName,replicateSocket)      # send to the two machines to transfare the file
+    
+    #close the socket
+    replicateSocket.close()
 
 
 def subNotifications(sharedLUT,sharedProcess,lutLock):
@@ -339,25 +365,29 @@ def subNotifications(sharedLUT,sharedProcess,lutLock):
                 tempdf = sharedProcess.df
                 for p in range(dkProcessNum):
                     if(tempdf['dkID'][p] == df2['dkID'][p]):
-                        
+                        '''
                         print("------------dobby dobby----------------------")
                         print(tempdf['dkID'][p])
                         print(tempdf['status'][p])
                         print(sharedProcess.df)
                         print("------------dobby dobby----------------------")
+                        '''
                         tempdf['status'][p] = "idle"
                         lutLock.acquire()        
                         sharedProcess.df=tempdf
                         lutLock.release()
+                        '''
                         print("------------sobby sobby----------------------")
                         print(sharedProcess.df)
                         print("------------sobby sobby----------------------")
+                        '''
                         #replicate this file , first make another socket to connect to the datakeeper port
                         replicateSocket = zmq.Context().socket(zmq.PAIR)
                         #modify this case
-                        replicateSocket.bind("tcp://127.0.0.1:"+str(6200+tempdf['dkNum'][p]))
+                        replicateSocket.bind("tcp://"+masterIP+":"+str(6200+tempdf['dkNum'][p]))
+                        print("file name is "+dic["filename"])
                         Replicates("upload",dic["filename"],sharedLUT,sharedProcess,replicateSocket)
-                        replicateSocket.close()
+                        
                         #check in this break
                         break
                         
