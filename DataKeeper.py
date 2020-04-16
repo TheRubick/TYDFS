@@ -8,7 +8,7 @@ import os
 
 dkNum = int(sys.argv[1])
 processNum = int(sys.argv[2])
-
+masterIP = "127.0.0.244"
 def aliveSender():
 
     #defining the port of the pub sub connection
@@ -17,7 +17,7 @@ def aliveSender():
     #intiating context
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
-    socket.connect("tcp://127.0.0.1:%s" % port)
+    socket.connect("tcp://"+masterIP+":%s" % port)
     
     while True:
         socket.send_string(str(dkNum))
@@ -26,11 +26,11 @@ def aliveSender():
 def dataKeeper(port):
     context = zmq.Context()
     socket2 = context.socket(zmq.PUB)
-    socket2.connect ("tcp://127.0.0.1:6100")
+    socket2.connect ("tcp://"+masterIP+":6100")
 
     while True:
         socket = context.socket(zmq.PAIR)
-        socket.bind("tcp://127.0.0.1:%s" % port)
+        socket.bind("tcp://127.0.0."+(dkNum+1)+":%s" % port)
         print("before recieve")
         dic = socket.recv_pyobj()
         print("after recieve .........")

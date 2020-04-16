@@ -35,7 +35,11 @@ dkNum = int(sys.argv[1])
 #intialize the number of processes for each data keeper
 dkProcessNum = int(sys.argv[2])
 
+#num of replicates
 numOfReplicates = int(sys.argv[3])
+
+#masterIP
+masterIP = "127.0.0.244"
 
 #intaite the port number of the first master process
 trackerPort = "6000"
@@ -44,6 +48,7 @@ trackerPort = "6000"
 for i in range(dkNum):
     dataLut['status'].append("alive")
     #@TODO should be configured from conf.sh
+    
     dataLut['dkID'].append("tcp://127.0.0.1:6000")
     dataLut['fileName'].append("--")
     dataLut['filePath'].append("--")
@@ -60,7 +65,7 @@ def watchDogFunc(sharedLUT,sharedProcess,lutLock):
     #intiating context
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
-    socket.bind("tcp://127.0.0.1:%s" % trackerPort)
+    socket.bind("tcp://"+masterIP+":%s" % trackerPort)
     socket.subscribe(topic="") # topic is empty string so the master accepts any string
 
     #intiate chance to live array to be used on making checks on the alive data keepers , maximum number of chance is 2
@@ -212,7 +217,7 @@ def MasterTracker(portNum,sharedLUT,sharedProcess,lutLock):
     #configuring the context of the socket
     context = zmq.Context()
     socket = context.socket(zmq.REP)
-    socket.bind("tcp://127.0.0.1:%s" % str(portNum))
+    socket.bind("tcp://"+masterIP+":%s" % str(portNum))
 
     while True: 
         clientData = socket.recv_pyobj()
