@@ -82,7 +82,7 @@ def dataKeeper(port):
         elif dic["requestType"]=="replicate":
             
             nameOfFile = dic["nameOfFile"]
-            if dic["type"] == "src":
+            if dic["type"] == "src":                      # from function NotifyMachineDataTransfer in master
                 socket2 = context.socket(zmq.PAIR)
                 f = open(nameOfFile, "rb")
                 video=f.read()
@@ -94,12 +94,11 @@ def dataKeeper(port):
                 print ('will send now')
                 socket2.send_pyobj(dic2)
                 print ('sent')
-                #ass = fass
                 f.close()
 
             elif dic["type"] == "dst":
                 socket2 = context.socket(zmq.PAIR)
-                socket2.connect(dic["type"])
+                socket2.connect(dic["type"])  #connect on what???????????????????????????????????????????????????????????????????????????
                 print ('will receve now')
                 dic2 = socket2.recv_pyobj()
                 print (dic2)

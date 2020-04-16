@@ -242,15 +242,15 @@ def NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, nameOfFile, r
     #in case of uploading file
     if(opType == "upload"):
         data = {
-            "fileName" : nameOfFile,
+            "nameOfFile" : nameOfFile,
             "machineToCopy" : machineToCopy
         }
-        replicateSocket.send_pyobj()
+        replicateSocket.send_pyobj(data)
     #if some one is dead and we want to replicate its' files
     else:
         data = {
             "requestType" : "replicate",
-            "fileName" : nameOfFile,
+            "nameOfFile" : nameOfFile,
             "machineToCopy" : machineToCopy,
             "type" : "src",
             "srcMachine" : sourceMachine
