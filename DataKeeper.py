@@ -34,7 +34,7 @@ def dataKeeper(port):
         print("before recieve")
         dic = socket.recv_pyobj()
         print("after recieve .........")
-        print(dic)
+        #print(dic)
         print(dic["requestType"])
         if dic["requestType"]=="upload":
             video=dic["video"]
@@ -47,6 +47,8 @@ def dataKeeper(port):
             dic["requestType"]="notificationUpload"
             dic["filepath"]=filepath
             socket2.send_pyobj(dic) 
+
+            #replicate phase
             socketReplicateDK = zmq.Context().socket(zmq.PAIR)
             socketReplicateDK.connect("tcp://127.0.0.1:"+str(6200+dkNum))
             recvData = socketReplicateDK.recv_pyobj()

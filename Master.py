@@ -309,7 +309,7 @@ def subNotifications(sharedLUT,sharedProcess,lutLock):
     
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
-    socket.bind("tcp://127.0.0.1:6100")
+    socket.bind("tcp://"+masterIP+":6100")
     socket.subscribe(topic="") 
     while True:
         dic = socket.recv_pyobj()
