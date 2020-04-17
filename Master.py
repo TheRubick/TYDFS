@@ -278,27 +278,22 @@ def getInstanceCount(nameOfFile,sharedLUT):
 
 def getSourceMachine(nameOfFile,sharedProcess,sharedLUT):
     #handle case no source machine
-    alive = sharedLUT.df[sharedLUT.df.status == 'alive']
-
+    alive = sharedLUT.df[sharedLUT.df.status == 'alive'].index
+    aliveCount = sharedLUT.df[sharedLUT.df.status == 'alive'].status.count()
+    aliveIndices = []
+    #print(aliveCount)
+    for i in range(0,aliveCount):
+       # print(i)
+        aliveIndices.append(alive[i])
+    
     sub_df = sharedLUT.df[sharedLUT.df.fileName == nameOfFile]  # sub dataframe that contains only rows for that file
-    print("print sub_df")
-    print(sub_df)
     #get idle and alive processes
-    idleProcesses = sharedProcess.df[sharedProcess.df.status == "idle" and sharedProcess.df.dkNum == alive.dkNum]
-    
-    print("print idle processes")
-    print(idleProcesses)
-    
+    idleProcesses = sharedProcess.df[sharedProcess.df.status == "idle"]
+    idleProcesses = idleProcesses[sharedProcess.df.dkNum == aliveIndices]
     
     x = set(sub_df.dkID.to_list())
     y = set(idleProcesses.dkID.to_list())
     t = y.difference(x)
-    print("x set")
-    print(x)
-    print("y set")
-    print(y)
-    print("t set")
-    print(t)
     z = y.difference(t)
     print(z)
     return z.pop()
@@ -306,13 +301,34 @@ def getSourceMachine(nameOfFile,sharedProcess,sharedLUT):
 
 def selectMachineToCopyTo(nameOfFile,sharedProcess,sharedLUT):
     
-    alive = sharedLUT.df[sharedLUT.df.status == 'alive']
-    sub_df = alive[alive.fileName != nameOfFile]  # sub dataframe that contains only rows for that file
+    #handle case no source machine
+    alive = sharedLUT.df[sharedLUT.df.status == 'alive'].index
+    aliveCount = sharedLUT.df[sharedLUT.df.status == 'alive'].status.count()
+    aliveIndices = []
+    #print(aliveCount)
+    for i in range(0,aliveCount):
+        aliveIndices.append(alive[i])
+    
+    #print(aliveIndices)
+    sub_df = sharedLUT.df[sharedLUT.df.fileName == nameOfFile]  # sub dataframe that contains only rows for that file
+    #print("print sub_df")
+    #print(sub_df)
+    #get idle and alive processes
     idleProcesses = sharedProcess.df[sharedProcess.df.status == "idle"]
-    x = set(sub_df.dkID)
-    y = set(idleProcesses.dkID)
-    z = x and y
-    print(z)
+    idleProcesses = idleProcesses[sharedProcess.df.dkNum == aliveIndices]
+    #print("print idle processes")
+    #print(idleProcesses)
+    
+    
+    x = set(sub_df.dkID.to_list())
+    y = set(idleProcesses.dkID.to_list())
+    t = y.difference(x)
+    #print("x set")
+    #print(x)
+    #print("y set")
+    #print(y)
+    z = t
+    #print(z)
     return z.pop()
 
 def Replicates(opType,fileName,sharedLUT,sharedProcess,replicateSocket):
@@ -324,7 +340,7 @@ def Replicates(opType,fileName,sharedLUT,sharedProcess,replicateSocket):
         print("src machine is "+sourceMachine)
         for _ in range(0,machinesnumOfReplicatesNeeded):
             machineToCopy = selectMachineToCopyTo(fileName,sharedProcess,sharedLUT)
-            print("src machine is "+machineToCopy)    
+            print("dst machine is "+machineToCopy)    
             NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, fileName,replicateSocket)      # send to the two machines to transfare the file
     
     #close the socket
@@ -334,9 +350,9 @@ def Replicates(opType,fileName,sharedLUT,sharedProcess,replicateSocket):
 def subNotifications(sharedLUT,sharedProcess,lutLock):
     
     context = zmq.Context()
-    socket = context.socket(zmq.SUB)
+    socket = context.socket(zmq.PULL)
     socket.bind("tcp://"+masterIP+":6100")
-    socket.subscribe(topic="") 
+    #socket.subscribe(topic="") 
     while True:
         dic = socket.recv_pyobj()
         if dic["requestType"]=="notificationUpload":
@@ -346,19 +362,19 @@ def subNotifications(sharedLUT,sharedProcess,lutLock):
                                     'fileName':[dic["filename"]],
                                     'filePath':[dic["filepath"]],
                                     'userID':[str(dic["clientId"])]}) 
-                print(sharedLUT)
+                #print(sharedLUT)
                 #change the look up table
                 lutLock.acquire()
                 tempdf = sharedLUT.df
-                print("--------sfdsdfsfsdfdsfsdfds----------------")
-                print(tempdf)
+                #print("--------sfdsdfsfsdfdsfsdfds----------------")
+                #print(tempdf)
                 tempdf = tempdf.append(df2,ignore_index=True)
-                print(tempdf)
-                print("--------sfdsdfsfsdfdsfsdfds99999999999999999999999----------------")
+                #print(tempdf)
+                #print("--------sfdsdfsfsdfdsfsdfds99999999999999999999999----------------")
                 sharedLUT.df=tempdf
                 lutLock.release()
 
-                print(sharedLUT)
+                #print(sharedLUT)
                 
                 #change the process status from busy to idle
                 

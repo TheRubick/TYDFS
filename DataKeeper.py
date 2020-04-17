@@ -25,18 +25,18 @@ def aliveSender():
             
 def dataKeeper(port):
     context = zmq.Context()
-    socket2 = context.socket(zmq.PUB)
+    socket2 = context.socket(zmq.PUSH)
     socket2.connect ("tcp://"+masterIP+":6100")
-
+    socket = context.socket(zmq.PAIR)
+    dkProcessIP = "127.0.0."+str(dkNum+1)+":"+str(port)
+    socket.bind("tcp://"+dkProcessIP)
     while True:
-        socket = context.socket(zmq.PAIR)
-        dkProcessIP = "127.0.0."+str(dkNum+1)+":"+str(port)
-        socket.bind("tcp://"+dkProcessIP)
+        
         print("before recieve")
         dic = socket.recv_pyobj()
-        print("after recieve .........")
+        print("data process "+dkProcessIP+" has recieved .........")
         #print(dic)
-        print(dic["requestType"])
+        print("request type = "+dic["requestType"])
         if dic["requestType"]=="upload":
             video=dic["video"]
             #hn3ml save ll video fi path mo3ian
@@ -56,20 +56,28 @@ def dataKeeper(port):
             #make condition such that replication operation isn't needed
             print("dk has recved the socket and is going to replicate")
             destData = {
-                "fileName" : recvData["nameOfFile"]+"replicateVideo",
+                "filename" : "replicateVideo"+recvData["nameOfFile"],
                 "requestType" : "replicate",
                 "video" : dic["video"],
                 "type" : "dst",
                 "dkSrcIP" : dkProcessIP,
                 "clientId" : "--"
             }
-            print(recvData["machineToCopy"])
-            socket.connect(recvData["machineToCopy"])
-            socket.send_pyobj(destData)
+            print("machine to send = "+recvData["machineToCopy"])
+            socketReplicateInformer = zmq.Context().socket(zmq.PAIR)
+            socketReplicateInformer.connect(recvData["machineToCopy"])
+            socketReplicateInformer.send_pyobj(destData)
             print("data have been sent")
             #confirm to the Master that the file has been sent to the dest DK
             #dic["requestType"] = "notificationReplicaUpload"
-            #socket2.send_pyobj(dic) 
+            #socket2.send_pyobj(dic)
+            print("machine to send = "+recvData["machineToCopy"])
+            socketReplicateSender = zmq.Context().socket(zmq.PAIR)
+            socketReplicateSender.connect(recvData["machineToCopy"])
+            socketReplicateSender.send_pyobj(destData)
+            
+            socketReplicateInformer.close() 
+            socketReplicateSender.close() 
             socketReplicateDK.close()
 
         elif dic["requestType"]=="download":
@@ -90,8 +98,8 @@ def dataKeeper(port):
 
         elif dic["requestType"]=="replicate":
             
-            nameOfFile = dic["nameOfFile"]
-            print("here we goooooooooooooooooooooooooooooooooooooooooooooooooooooooooo")
+            #nameOfFile = dic["nameOfFile"]
+            #print("here we goooooooooooooooooooooooooooooooooooooooooooooooooooooooooo")
             if dic["type"] == "src":                      # from function NotifyMachineDataTransfer in master
                 socket2 = context.socket(zmq.PAIR)
                 f = open(nameOfFile, "rb")
@@ -108,29 +116,34 @@ def dataKeeper(port):
 
             elif dic["type"] == "dst":
                 print ('will receve now')
-                print ('will receve now')
-                print ('will receve now')
-                print ('will receve now')
-                print ('will receve now')
-                context = zmq.Context()
-                socket3 = context.socket(zmq.PAIR)
-                print(dic["dkSrcIP"])
-                socket3.connect(dic["dkSrcIP"])
+                #context = zmq.Context()
+                #socket3 = context.socket(zmq.PAIR)
+                #print(dic["dkSrcIP"])
+                #socket3.connect("tcp://"+dic["dkSrcIP"])
                 
-                dic2 = socket3.recv_pyobj()
+                #dic2 = socket3.recv_pyobj()
                 #print (dic2)
                 print ('receved')
-                video=dic2["video"]
-                f = open(dic2["fileName"], "ab")
+                video=dic["video"]
+                f = open(dic["filename"], "ab")
                 f.write(video)
                 f.close()
-                dic["requestType"] = "notificationUpload"
-                dic["filepath"] = dic2["fileName"]
-                dic["fileName"] = dic2["fileName"]
-                dic["clientId"] = dic2["clientId"]
-                socket3.close()
-
-                socket2.send_pyobj(dic) 
+                dicSend = {
+                    "requestType" : "notificationUpload",
+                    "filepath" : dic["filename"],
+                    "filename" : dic["filename"],
+                    "clientId" : dic["clientId"],
+                    "dataKeeperport" : "tcp://"+str(dkProcessIP)
+                }
+                print(dicSend["filename"])
+                #socket3.close()
+                print("inform the master that replicate is done")
+                context3 = zmq.Context()
+                socket23 = context3.socket(zmq.PUSH)
+                socket23.connect ("tcp://"+masterIP+":6100")
+                socket23.send_pyobj(dicSend)
+        else:
+            print("bad request")
 
     socket.close()
     time.sleep(1) 
