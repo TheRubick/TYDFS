@@ -9,6 +9,7 @@ import os
 dkNum = int(sys.argv[1])
 processNum = int(sys.argv[2])
 masterIP = "127.0.0.244"
+filepath="dk"+str(dkNum)+"Dir"
 def aliveSender():
 
     #defining the port of the pub sub connection
@@ -24,15 +25,17 @@ def aliveSender():
         time.sleep(1)    
             
 def dataKeeper(port):
-    context = zmq.Context()
-    socket2 = context.socket(zmq.PUSH)
-    socket2.connect ("tcp://"+masterIP+":6100")
-    socket = context.socket(zmq.PAIR)
-    dkProcessIP = "127.0.0."+str(dkNum+1)+":"+str(port)
-    socket.bind("tcp://"+dkProcessIP)
+    
     while True:
+        print("data keeper"+str(dkNum)+" reciever")
+        context = zmq.Context()
+        socket2 = context.socket(zmq.PUSH)
+        socket2.connect ("tcp://"+masterIP+":6100")
         
-        print("before recieve")
+        socket = context.socket(zmq.PAIR)
+        dkProcessIP = "127.0.0."+str(dkNum+1)+":"+str(port)
+        socket.bind("tcp://"+dkProcessIP)
+       
         dic = socket.recv_pyobj()
         print("data process "+dkProcessIP+" has recieved .........")
         #print(dic)
@@ -40,48 +43,25 @@ def dataKeeper(port):
         if dic["requestType"]=="upload":
             video=dic["video"]
             #hn3ml save ll video fi path mo3ian
-            filepath=dic["filename"]
-            f = open(filepath, "ab")
+            
+
+            completeName = os.path.join(filepath,dic["filename"])
+            
+            f = open(completeName, "wb")
             f.write(video)
             f.close()
             #notify masterrrrr   
             dic["requestType"]="notificationUpload"
             dic["filepath"]=filepath
-            socket2.send_pyobj(dic) 
-
-            #replicate phase
-            socketReplicateDK = zmq.Context().socket(zmq.PAIR)
-            socketReplicateDK.connect("tcp://127.0.0.244:"+str(6200+dkNum))
-            recvData = socketReplicateDK.recv_pyobj()
-            #make condition such that replication operation isn't needed
-            print("dk has recved the socket and is going to replicate")
-            destData = {
-                "filename" : "replicateVideo"+recvData["nameOfFile"],
-                "requestType" : "replicate",
-                "video" : dic["video"],
-                "type" : "dst",
-                "dkSrcIP" : dkProcessIP,
-                "clientId" : "--"
-            }
-            print("machine to send = "+recvData["machineToCopy"])
-            socketReplicateInformer = zmq.Context().socket(zmq.PAIR)
-            socketReplicateInformer.connect(recvData["machineToCopy"])
-            socketReplicateInformer.send_pyobj(destData)
-            print("data have been sent")
-            #confirm to the Master that the file has been sent to the dest DK
-            #dic["requestType"] = "notificationReplicaUpload"
-            #socket2.send_pyobj(dic)
-            print("machine to send = "+recvData["machineToCopy"])
-            socketReplicateSender = zmq.Context().socket(zmq.PAIR)
-            socketReplicateSender.connect(recvData["machineToCopy"])
-            socketReplicateSender.send_pyobj(destData)
+            dic["isReplicate"] = False
+            dic["dkNum"] = "--"
+            socket2.send_pyobj(dic)
             
-            socketReplicateInformer.close() 
-            socketReplicateSender.close() 
-            socketReplicateDK.close()
+            socket.close()
+            socket2.close() 
 
         elif dic["requestType"]=="download":
-            curFile = dic["filepath"]
+            curFile = filepath+"/"+dic["filepath"]
             size = os.stat(curFile).st_size
             target = open(curFile, 'rb')
             file = target.read(size)
@@ -92,60 +72,79 @@ def dataKeeper(port):
                 target.close()
                 time.sleep(1)
                 dic = {
-                    "requestType" : "notificationDownload"
+                    "requestType" : "notificationDownload",
+                    "isReplicate" : False,
+                    "dataKeeperport" : "tcp://"+dkProcessIP,
+                    'fileName':"--",
+                    'filePath':"--",
                     }
+                dic["dkNum"] = "--"
                 socket2.send_pyobj(dic)
+
+            socket.close()
+            socket2.close() 
 
         elif dic["requestType"]=="replicate":
             
-            #nameOfFile = dic["nameOfFile"]
-            #print("here we goooooooooooooooooooooooooooooooooooooooooooooooooooooooooo")
             if dic["type"] == "src":                      # from function NotifyMachineDataTransfer in master
-                socket2 = context.socket(zmq.PAIR)
-                f = open(nameOfFile, "rb")
-                video=f.read()
-                dic2 = {
-                    "video" : video,
-                    "src" : dic["srcMachine"]
-                    }
-                socket2.bind(dic["machineToCopy"])
-                print ('will send now')
-                socket2.send_pyobj(dic2)
-                print ('sent')
-                f.close()
+                
+                print("dk has recved the socket and is going to replicate")
+                
+                f = open(filepath+"/"+dic["nameOfFile"], "rb")
+                
+                videoToBeSend = f.read()
+                
+                destData = {
+                    "filename" : dic["nameOfFile"],
+                    "requestType" : "replicate",
+                    "video" : videoToBeSend,
+                    "type" : "dst",
+                    "dkSrcIP" : dkProcessIP,
+                    "clientId" : "--"
+                }
+                print("machine to send = "+dic["machineToCopy"])
+                socketReplicateSender = zmq.Context().socket(zmq.PAIR)
+                socketReplicateSender.connect(dic["machineToCopy"])
+                socketReplicateSender.send_pyobj(destData)
+                print("data have been sent")
+                #send to master that data have been replicated
+                socket.send_string("")
+                socketReplicateSender.close()
+                socket.close()
+                socket2.close() 
 
             elif dic["type"] == "dst":
-                print ('will receve now')
-                #context = zmq.Context()
-                #socket3 = context.socket(zmq.PAIR)
-                #print(dic["dkSrcIP"])
-                #socket3.connect("tcp://"+dic["dkSrcIP"])
-                
-                #dic2 = socket3.recv_pyobj()
-                #print (dic2)
-                print ('receved')
+                #print ('will receve now')
+                #print ('receved')
                 video=dic["video"]
-                f = open(dic["filename"], "ab")
+
+                completeName = os.path.join(filepath,dic["filename"])
+            
+                f = open(completeName, "wb")
                 f.write(video)
                 f.close()
+
                 dicSend = {
                     "requestType" : "notificationUpload",
-                    "filepath" : dic["filename"],
+                    "filepath" : filepath,
                     "filename" : dic["filename"],
                     "clientId" : dic["clientId"],
-                    "dataKeeperport" : "tcp://"+str(dkProcessIP)
+                    "dataKeeperport" : "tcp://"+str(dkProcessIP),
+                    "isReplicate" : True,
+                    "dkNum" : "--"
                 }
-                print(dicSend["filename"])
+                #print(dicSend["filename"])
                 #socket3.close()
                 print("inform the master that replicate is done")
-                context3 = zmq.Context()
-                socket23 = context3.socket(zmq.PUSH)
-                socket23.connect ("tcp://"+masterIP+":6100")
-                socket23.send_pyobj(dicSend)
+                socket2.send_pyobj(dicSend)
+                socket.close()
+                socket2.close() 
+            
+        
         else:
             print("bad request")
-
-    socket.close()
+            socket.close()
+            socket2.close() 
     time.sleep(1) 
     print ("blaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")        
 

@@ -197,14 +197,15 @@ def get_Dks_having_file_download(filename, sharedLUT,sharedProcess,lutLock):
     dic = sharedLUT.df
     dic2 = {}
     dic3 = sharedProcess.df
-    print(dic)
-    print("-------jjjjj-----------------")
-    for i in dic ["fileName"]:
-        print(i)
-    print("------------------------------------------------")
+    #print(dic)
+    #print("-------jjjjj-----------------")
+    #for i in dic ["fileName"]:
+        #print(i)
+    #print("------------------------------------------------")
     for i in range(sharedLUT.df.shape[0]):
         if dic ["fileName"][i] == filename and dic["fileName"][i] != "--":
-            if dic ["status"][i] == "alive":
+            dkMachineNum = int(dic ["dkID"][i][14]) - 1
+            if dic ["status"][dkMachineNum] == "alive":
                 for j in range(sharedProcess.df.shape[0]):
                     if(dic ["dkID"][i] == dic3["dkID"][j] and dic3["status"][j] == "idle"):
                         lutLock.acquire()
@@ -212,13 +213,14 @@ def get_Dks_having_file_download(filename, sharedLUT,sharedProcess,lutLock):
                         tempdf["status"][j] = "busy"
                         sharedProcess.df = tempdf
                         lutLock.release()
-                        dic2[dic ["dkID"][i] ]= dic["filePath"][i]
-    return dic2
+                        dic2[dic ["dkID"][i] ]= dic["fileName"][i]
+                        return dic2
 
 def MasterTracker(portNum,sharedLUT,sharedProcess,lutLock):
     #configuring the context of the socket
     context = zmq.Context()
     socket = context.socket(zmq.REP)
+    print(portNum)
     socket.bind("tcp://"+masterIP+":%s" % str(portNum))
 
     while True: 
@@ -234,6 +236,7 @@ def MasterTracker(portNum,sharedLUT,sharedProcess,lutLock):
             #print(dks)
             #dks['requestType'] = "download"
             #print(dks)
+            print(dks)
             socket.send_pyobj(dks)
             print("master replied to client ")
         else:
@@ -244,31 +247,51 @@ def MasterTracker(portNum,sharedLUT,sharedProcess,lutLock):
 Replicas Phase
 '''
 
-def NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, nameOfFile, replicateSocket):#fffhfghfhgffhgfhg
-
-    #in case of uploading file
-    if(opType == "upload"):
-        print("source machine ")
-        data = {
-            "nameOfFile" : nameOfFile,
-            "machineToCopy" : machineToCopy
-        }
-        replicateSocket.send_pyobj(data)
-    #if some one is dead and we want to replicate its' files
-    else:
-        data = {
-            "requestType" : "replicate",
-            "nameOfFile" : nameOfFile,
-            "machineToCopy" : machineToCopy,
-            "type" : "src",
-            "srcMachine" : sourceMachine
-        }
-        #intialize a socket
+def NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, nameOfFile,machinesnumOfReplicatesNeeded,sharedProcess,lutLock):
+    print("src machine is "+sourceMachine)
+    #time.sleep(5)
+    tempdf = sharedProcess.df
+    for p in range(dkProcessNum*dkNum):
+        if(tempdf['dkID'][p] in machineToCopy):
+            tempdf['status'][p] = "busy"
+            lutLock.acquire()        
+            sharedProcess.df=tempdf
+            lutLock.release()
+        
+    #print("printing sharedProcesses in Notify before transfer")
+    #print(sharedProcess.df)
+        
+    
+    for i in range(0,machinesnumOfReplicatesNeeded):
+        time.sleep(3.5)
         socket = zmq.Context().socket(zmq.PAIR)
         socket.connect(sourceMachine)
+        
+
+        print("machine to send "+machineToCopy[i])
+        data = {
+            "nameOfFile" : nameOfFile,
+            "machineToCopy" : machineToCopy[i],
+            "requestType" : "replicate",
+            "type" : "src"
+        }
+        socket.send_pyobj(data)
+        #wait till the datakeeper replicate succesfully
+        socket.recv_string()
+        print("data have been successfully replicated")
         socket.close()
+        
+    tempdf = sharedProcess.df
+    for p in range(dkProcessNum*dkNum):
+        if(tempdf['dkID'][p] in machineToCopy):
+            tempdf['status'][p] = "idle"
+            lutLock.acquire()        
+            sharedProcess.df=tempdf
+            lutLock.release()
 
-
+    print("printing sharedProcesses in Notify after transfer")
+    print(sharedProcess.df)
+    
 def getInstanceCount(nameOfFile,sharedLUT):
     
     alive = sharedLUT.df[sharedLUT.df.status == "--"]
@@ -329,19 +352,19 @@ def selectMachineToCopyTo(nameOfFile,sharedProcess,sharedLUT):
     #print(y)
     z = t
     #print(z)
-    return z.pop()
+    return z
 
-def Replicates(opType,fileName,sharedLUT,sharedProcess,replicateSocket):
+def Replicates(opType,fileName,sharedLUT,replicateSocket,sharedProcess,lutLock):
     #print("inside replicate function")
     instanceCount = getInstanceCount(fileName,sharedLUT)         # how many the file exsist in alive 
     machinesnumOfReplicatesNeeded = numOfReplicates - instanceCount       # how many copies needed
     if(machinesnumOfReplicatesNeeded > 0) and (instanceCount != 0):
         sourceMachine = getSourceMachine(fileName,sharedProcess,sharedLUT)  # for now it is the num of the macine only
-        print("src machine is "+sourceMachine)
-        for _ in range(0,machinesnumOfReplicatesNeeded):
-            machineToCopy = selectMachineToCopyTo(fileName,sharedProcess,sharedLUT)
-            print("dst machine is "+machineToCopy)    
-            NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, fileName,replicateSocket)      # send to the two machines to transfare the file
+        #print("src machine is "+sourceMachine)
+        machineToCopy = list(selectMachineToCopyTo(fileName,sharedProcess,sharedLUT)) 
+        #print(machineToCopy[1])
+        
+        NotifyMachineDataTransfer(opType,sourceMachine, machineToCopy, fileName,machinesnumOfReplicatesNeeded,sharedProcess,lutLock)      # send to the two machines to transfare the file
     
     #close the socket
     replicateSocket.close()
@@ -355,80 +378,62 @@ def subNotifications(sharedLUT,sharedProcess,lutLock):
     #socket.subscribe(topic="") 
     while True:
         dic = socket.recv_pyobj()
+        print("type of the request is "+dic["requestType"])
+        if(dic["isReplicate"]):
+            print("weeeeeee haaaaaaaaaaaaaaaaa")
+        else:
+            print("smth else")
         if dic["requestType"]=="notificationUpload":
                 #update look up table
-                df2 = pd.DataFrame({"status":"--", 
+                df2 = pd.DataFrame({"status":dic["dkNum"], 
                                     'dkID':[dic["dataKeeperport"]],
                                     'fileName':[dic["filename"]],
                                     'filePath':[dic["filepath"]],
                                     'userID':[str(dic["clientId"])]}) 
-                #print(sharedLUT)
                 #change the look up table
                 lutLock.acquire()
                 tempdf = sharedLUT.df
-                #print("--------sfdsdfsfsdfdsfsdfds----------------")
-                #print(tempdf)
                 tempdf = tempdf.append(df2,ignore_index=True)
-                #print(tempdf)
-                #print("--------sfdsdfsfsdfdsfsdfds99999999999999999999999----------------")
                 sharedLUT.df=tempdf
                 lutLock.release()
 
-                #print(sharedLUT)
-                
                 #change the process status from busy to idle
                 
                 tempdf = sharedProcess.df
-                for p in range(dkProcessNum):
-                    if(tempdf['dkID'][p] == df2['dkID'][p]):
-                        '''
-                        print("------------dobby dobby----------------------")
-                        print(tempdf['dkID'][p])
-                        print(tempdf['status'][p])
-                        print(sharedProcess.df)
-                        print("------------dobby dobby----------------------")
-                        '''
+                stopLoop = False
+
+                print(df2['dkID'][0])
+                for p in range(dkProcessNum and not(stopLoop)):
+                    if(tempdf['dkID'][p] == dic["dataKeeperport"]):
                         tempdf['status'][p] = "idle"
                         lutLock.acquire()        
                         sharedProcess.df=tempdf
                         lutLock.release()
-                        '''
-                        print("------------sobby sobby----------------------")
-                        print(sharedProcess.df)
-                        print("------------sobby sobby----------------------")
-                        '''
-                        #replicate this file , first make another socket to connect to the datakeeper port
-                        replicateSocket = zmq.Context().socket(zmq.PAIR)
-                        #modify this case
-                        replicateSocket.bind("tcp://"+masterIP+":"+str(6200+tempdf['dkNum'][p]))
-                        print("file name is "+dic["filename"])
-                        Replicates("upload",dic["filename"],sharedLUT,sharedProcess,replicateSocket)
                         
-                        #check in this break
-                        break
+                        if(not(dic["isReplicate"])):
+                            #replicate this file , first make another socket to connect to the datakeeper port
+                            replicateSocket = zmq.Context().socket(zmq.PAIR)
+                            #modify this case
+                            replicateSocket.bind("tcp://"+masterIP+":"+str(6200+tempdf['dkNum'][p]))
+                            print("file name is "+dic["filename"])
+                            Replicates("upload",dic["filename"],sharedLUT,replicateSocket,sharedProcess,lutLock)    
+                            #check in this break
+                            stopLoop = True
                         
                     
 
-        elif dic["requestType"]=="notificationDownload" or dic["requestType"]=="notificationReplicaUpload":
+        elif dic["requestType"]=="notificationDownload":
             tempdf = sharedProcess.df
             for p in range(dkProcessNum*dkNum):
-                if(tempdf['dkID'][p] == df2['dkID'][p]):  
-                    print("------------dobby dobby----------------------")
-                    print(tempdf['dkID'][p])
-                    print(tempdf['status'][p])
-                    print(sharedProcess.df)
-                    print("------------dobby dobby----------------------")
+                if(tempdf['dkID'][p] == dic["dataKeeperport"]):  
                     tempdf['status'][p] = "idle"
                     lutLock.acquire()
                     sharedProcess.df=tempdf
                     lutLock.release()
-                    print("------------sobby sobby----------------------")
-                    print(sharedProcess.df)
-                    print("------------sobby sobby----------------------")
-                    #check in this break
                     break
 
-
+        #print("print shared process nowwwwwwwwwwwwwwww")
+        #print(sharedProcess.df)
 
 
 '''
