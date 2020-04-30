@@ -130,7 +130,11 @@ def watchDogFunc(sharedLUT,sharedProcess,lutLock):
                                 fileToReplicate.append(sharedLUT.df['fileName'][dks])
                     print(fileToReplicate)
                     for fileTR in fileToReplicate:
-                        Replicates("replicateDead",fileTR,sharedLUT,sharedProcess,"")
+                        #replicate this file , first make another socket to connect to the datakeeper port
+                        replicateSocket = zmq.Context().socket(zmq.PAIR)
+                        #modify this case
+                        replicateSocket.bind("tcp://"+masterIP+":"+str(6200+tempdf['dkNum'][p]))
+                        Replicates("replicateDead",fileTR,sharedLUT,replicateSocket,sharedProcess,sharedLUT,lutLock)
 
             #make the flag of start period with true
             startPeriod = True
@@ -359,7 +363,7 @@ def Replicates(opType,fileName,sharedLUT,replicateSocket,sharedProcess,lutLock):
     instanceCount = getInstanceCount(fileName,sharedLUT)         # how many the file exsist in alive 
     machinesnumOfReplicatesNeeded = numOfReplicates - instanceCount       # how many copies needed
     if(machinesnumOfReplicatesNeeded > 0) and (instanceCount != 0):
-        sourceMachine = getSourceMachine(fileName,sharedProcess,sharedLUT)  # for now it is the num of the macine only
+        sourceMachine = getSourceMachine(fileName,sharedProcess,sharedLUT)
         #print("src machine is "+sourceMachine)
         machineToCopy = list(selectMachineToCopyTo(fileName,sharedProcess,sharedLUT)) 
         #print(machineToCopy[1])
